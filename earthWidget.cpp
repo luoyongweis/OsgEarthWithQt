@@ -3,6 +3,7 @@
 #include <osgEarthDrivers/feature_ogr/OGRFeatureOptions>
 #include <osgEarth/GeoData>
 #include <QDateTime>
+#include <QString>
 #include <osgEarthUtil/EarthManipulator>
 #include <osgEarthUtil/ExampleResources>
 #include <osgEarthAnnotation/ImageOverlay>
@@ -17,20 +18,28 @@
 #include <osgEarthAnnotation/ImageOverlayEditor>
 #include <osgEarthSymbology/GeometryFactory>
 
+#include <osgEarthUtil/MouseCoordsTool>
+
+#include "pickEventHandler.h"
+
 double earthRotationDegree = -170;
+int earthWidget::_count = 0;
 int earthWidget::mInterval = 0;
 
 
 
 earthWidget::earthWidget(QWidget* parent) : AdapterWidget(parent)
 {
-	setCursor(Qt::DragMoveCursor);
+	//setCursor(Qt::DragMoveCursor);
 	initViewer();
 	initEarthWidget();
 	setEarthManipulator();
 	creatCanvas();
+	createLabels();
+	connectWidgets();
+	addEventHandlers();
 	earthRun();
-
+	//test();
 }
 
 earthWidget::~earthWidget()
@@ -41,7 +50,7 @@ void earthWidget::initViewer()
 {
 	/*_view = new osgViewer::Viewer;*/
 	_view = this;
-
+	osg::notify(osg::FATAL);
 	//int xoffset = 40;
 	//int yoffset = 40;
 	//osg::ref_ptr<osg::GraphicsContext::Traits> traits = new osg::GraphicsContext::Traits;
@@ -64,15 +73,10 @@ void earthWidget::initViewer()
 	_view->getCamera()->setProjectionMatrixAsPerspective(30.0f,
 		static_cast<double>(width()) / static_cast<double>(height()), 1.0f, 10000.0f);
 	_view->getCamera()->setGraphicsContext(getGraphicsWindow());
-	setThreadingModel(osgViewer::ViewerBase::SingleThreaded);
+										    setThreadingModel(osgViewer::ViewerBase::SingleThreaded);
 	_view->getCamera()->setNearFarRatio(0.0000001);
 	_view->getCamera()->setComputeNearFarMode(osg::CullSettings::COMPUTE_NEAR_FAR_USING_BOUNDING_VOLUMES);//);
-
-	_view->addEventHandler(new osgViewer::StatsHandler);
-	_view->addEventHandler(new osgViewer::WindowSizeHandler);
-	_view->addEventHandler(new osgViewer::ThreadingHandler());
-	_view->addEventHandler(new osgViewer::LODScaleHandler());
-
+	
 	//connect(&_timer, SIGNAL(timeout()), this, SLOT(updateGL()));
 	//_timer.start(10);
 
@@ -87,7 +91,7 @@ void earthWidget::initEarthWidget()
 	_root = new osg::Group();
 	
 
-	osg::ref_ptr<osg::Node> node = osgDB::readNodeFile("./myearth1.earth");
+	osg::ref_ptr<osg::Node> node = osgDB::readNodeFile("./myearth.earth");
 	_pMapNode = osgEarth::MapNode::get(node);
 	_pMapNode->setName("earth");
 
@@ -102,6 +106,8 @@ void earthWidget::initEarthWidget()
 
 	m_pMapSRS = _pMapNode->getMapSRS();			/**地固坐标系*/
 	m_pGeoSRS = m_pMapSRS->getGeographicSRS();	/**大地坐标系*/
+
+	//std::cout << "getMapSRS : " << m_pMapSRS->getEllipsoid()->getName() << "getGeographicSRS : " << m_pGeoSRS->getEllipsoid()->getName() << std::endl;
 
 	//_pRoot = new osg::Group;
 	double time = 0;
@@ -142,6 +148,7 @@ void earthWidget::initEarthWidget()
 	osg::ref_ptr<const osgEarth::SpatialReference> pGeoSRS = _pMapNode->getMapSRS()->getGeographicSRS();
 	osgEarth::GeoPoint geoEarthPt = osgEarth::GeoPoint(pGeoSRS, 112.0, 32.0, 0.0);
 
+
 	osg::Vec3d earthEndPos;
 	geoEarthPt.toWorld(earthEndPos);
 
@@ -154,6 +161,25 @@ void earthWidget::initEarthWidget()
 
 	addLabel();
 	
+}
+
+void earthWidget::addEventHandlers()
+{
+	////鼠标位置信息显示
+	//osgEarth::Util::Formatter* formatter = new osgEarth::Util::LatLongFormatter();
+	//osgEarth::Util::LabelControl* readout = new osgEarth::Util::LabelControl();
+	//_root->addChild(readout);
+	//osgEarth::Util::ControlCanvas::get(_view)->addControl(readout);
+	//osgEarth::Util::MouseCoordsTool* tool = new osgEarth::Util::MouseCoordsTool(_pMapNode);
+	//tool->addCallback(new osgEarth::Util::MouseCoordsLabelCallback(readout, formatter));
+	//_view->addEventHandler(tool);
+	//// add the state manipulator
+	//_view->addEventHandler(new osgGA::StateSetManipulator(_view->getCamera()->getOrCreateStateSet()));
+	_view->addEventHandler(new PickHandle(m_pMapSRS));
+	_view->addEventHandler(new osgViewer::StatsHandler);
+	_view->addEventHandler(new osgViewer::WindowSizeHandler);
+	_view->addEventHandler(new osgViewer::ThreadingHandler());
+	_view->addEventHandler(new osgViewer::LODScaleHandler());
 }
 
 void earthWidget::earthRun()
@@ -190,28 +216,28 @@ void earthWidget::updateScene()
 
 void earthWidget::updateSceneTime()
 {
-	osgEarth::DateTime tt(QDateTime::currentDateTime().toTime_t() + 8 * 60 * 60 /*+ (mInterval++)*6*/);
+	osgEarth::DateTime tt(QDateTime::currentDateTime().toTime_t()/* + 8 * 60 * 60*/ + (_count++)*mInterval);
+
 	
+
 	_sky->setDateTime(tt);
 	osgEarth::DateTime date = _sky->getDateTime();
 	//std::cout << "DateTime:" <<date.year()<<" "<<date.month()<<" "<<date.day()<<" "<<date.hours() << endl;
 	double deltaS = floor(float(tt.asTimeStamp() - _reveTime));
 	earthRotationDegree = (deltaS)*   0.00416666666;
+	
 
-	//if (_root)
-	//{
-		//地球自转RsR2D
-		_pEarthMan->setByMatrix(_pEarthMan->getMatrix()*osg::Matrix::rotate(osg::inDegrees(-earthRotationDegree), osg::Z_AXIS));
-		//std::cout << "earthRotationDegree : " << earthRotationDegree << "  deltaS : " << deltaS <<
-		//	"  reveTime : " << _reveTime << " ttTime : " << tt.asTimeStamp() << endl;
-		if (_coordinateSystem == Coordinate_J2000)
-		{
-			FixedToJ2000(earthRotationDegree);
-			std::cout << "FixedToJ2000 ---> earthRotationDegree" << earthRotationDegree << " " << date.year() << " " << date.month() << " " << date.day() << " " << date.hours() <<
-			" "<<tt.year()<<" "<<tt.month()<<" "<<tt.day()<<" "<<tt.hours()<<_sateListMatrix->getMatrix().getTrans()[0]<<
-			" " << _sateListMatrix->getMatrix().getTrans()[1] << " " << _sateListMatrix->getMatrix().getTrans()[2] << endl;
-		}
-	//}
+	//地球自转RsR2D
+	_pEarthMan->setByMatrix(_pEarthMan->getMatrix()*osg::Matrix::rotate(osg::inDegrees(-earthRotationDegree), osg::Z_AXIS));
+	//std::cout << "earthRotationDegree : " << earthRotationDegree << "  deltaS : " << deltaS <<
+	//	"  reveTime : " << _reveTime << " ttTime : " << tt.asTimeStamp() << endl;
+	/*if (_coordinateSystem == Coordinate_J2000)
+	{
+		FixedToJ2000(earthRotationDegree);
+		std::cout << "FixedToJ2000 ---> earthRotationDegree" << earthRotationDegree << " " << date.year() << " " << date.month() << " " << date.day() << " " << date.hours() <<
+		" "<<tt.year()<<" "<<tt.month()<<" "<<tt.day()<<" "<<tt.hours()<<_sateListMatrix->getMatrix().getTrans()[0]<<
+		" " << _sateListMatrix->getMatrix().getTrans()[1] << " " << _sateListMatrix->getMatrix().getTrans()[2] << endl;
+	}*/
 
 	QString time;
 	time += "Earth Intertial Axes\n\n";
@@ -272,12 +298,25 @@ void earthWidget::setEarthManipulator()
 
 	_pEarthMan->setViewpoint(osgEarth::Util::Viewpoint("", 105, 33, 0, 0, -90, 30000000));
 	_pEarthMan->setHomeViewpoint(osgEarth::Util::Viewpoint("", 105, 33, 0, 0, -90, 30000000));
+
+	_pFollowMan = new osgGA::NodeTrackerManipulator;
+	_pFollowMan->setHomePosition(osg::Vec3(20000, -100000.0, 20000.0), osg::Vec3(0, 0, 0), osg::Z_AXIS);
+	_pFollowMan->setTrackerMode(osgGA::NodeTrackerManipulator::NODE_CENTER); //
+	_pFollowMan->setRotationMode(osgGA::NodeTrackerManipulator::TRACKBALL);
+	_pFollowMan->setTrackNode(_root->getChild(0));
+
 }
 
 void earthWidget::creatCanvas()
 {
+
+	//控件绘制容器
+	_canvas = new ControlCanvas();
+	//将要显示的控件加入到root组节点中去
+	_root->addChild(_canvas);
+
 	m_timeInfo = new OsgTextNode;
-	m_timeInfo->setTextColor(osg::Vec4(255, 255, 255, 0.8));
+	m_timeInfo->setTextColor(osg::Vec4(255, 255, 255, 0.5));
 	m_timeInfo->setTextLocatePos(osg::Vec2d(10, 45));
 	m_timeInfo->setTextSize(20);
 
@@ -309,21 +348,167 @@ void earthWidget::addLabel()
 		// bunch of pins:
 		_root->addChild(new osgEarth::Annotation::PlaceNode(_pMapNode, osgEarth::GeoPoint(m_pGeoSRS, 117.5, 39.38), "Beijing", pm));
 		_root->addChild(new osgEarth::Annotation::PlaceNode(_pMapNode, osgEarth::GeoPoint(m_pGeoSRS, 108.93, 34.27), "Xian", pm));
-
+		
 	}
+}
+
+void earthWidget::createLabels()
+{
+	//下面是设置一个控件，grid的意思是用格网去布局里面的小控件
+	// Make the readout:
+	grid = new Grid();
+	//设置几个Label文字控件显示在场景中的第行
+	std::wstring str = L"Coords (Lat, Long)经纬度:";
+	grid->setControl(0, 0, new LabelControl(""));
+	grid->setControl(0, 1, new LabelControl("Vertical Datum:"));
+	grid->setControl(0, 2, new LabelControl("Height (MSL):"));
+	grid->setControl(0, 3, new LabelControl("Height (HAE):"));
+	grid->setControl(0, 4, new LabelControl("Isect  (HAE):"));
+	grid->setControl(0, 5, new LabelControl("Resolution:"));
+	//设置几个Label文字控件显示在场景中的第行
+	s_posLabel = grid->setControl(1, 0, new LabelControl(""));
+	s_vdaLabel = grid->setControl(1, 1, new LabelControl(""));
+	s_mslLabel = grid->setControl(1, 2, new LabelControl(""));
+	s_haeLabel = grid->setControl(1, 3, new LabelControl(""));
+	s_mapLabel = grid->setControl(1, 4, new LabelControl(""));
+	s_resLabel = grid->setControl(1, 5, new LabelControl(""));
+	_canvas->addChild(grid);
 }
 
 void earthWidget::addPlane()
 {
 	_planeRoot = new osg::Group();
 	
-	osg::ref_ptr<osg::Node> nodePlane = osgDB::readNodeFile("glider.osgt");
-	Simulator* sim1 = new Simulator(_planeRoot, _pEarthMan, _pMapNode, NULL, "Plane 1", '1');
-	sim1->_lat0 = 55.0;
-	sim1->_lon0 = 45.0;
-	sim1->_lat1 = -55.0;
-	sim1->_lon1 = -45.0;
-	_view->addEventHandler(sim1);
+	nodePlane = osgDB::readNodeFile("glider.osg");
+	//
+	//osg::ref_ptr<osg::MatrixTransform> mt = new osg::MatrixTransform;
+	//mt->setMatrix(osg::Matrix::scale(osg::Vec3(5000, 5000, 5000)));
+	//mt->addChild(nodePlane);
+	//
+	osg::ref_ptr<NodeMatrix> nodeMatrix = new NodeMatrix;
+	nodeMatrix->addsChild(nodePlane);
+	nodeMatrix->toScale(osg::Matrix::scale(osg::Vec3(5000, 5000, 5000))*osg::Matrix::rotate(osg::DegreesToRadians(-130.0), 0.0, 0.0, 1.0));
+	//nodeMatrix->toRotate(-180.0, osg::Z_AXIS);
+	
+
+	_geo = new GeoPositionNode(_pMapNode);
+	_geo->getPositionAttitudeTransform()->addChild(nodeMatrix);
+
+	_vec3d = new osg::Vec3d(108.93, 34.27, 100000.0);
+	GeoPoint p = GeoPoint(SpatialReference::create("wgs84"), *_vec3d);
+	_geo->setPosition(p);
+
+	Style style;
+	TextSymbol* text = style.getOrCreate<TextSymbol>();
+	text->size() = 25.0f;
+	text->declutter() = false;
+	text->pixelOffset()->set(50, 50);
+
+	_label = new LabelNode(_name, style);
+	_label->setDynamic(true);
+	_label->setHorizonCulling(false);
+
+	_geo->getPositionAttitudeTransform()->addChild(_label);
+
+	_planeRoot->addChild(_geo.get());
 
 	_root->addChild(_planeRoot.get());
+	
 }
+
+void earthWidget::slot_isFollowPlane(bool isFollow)
+{
+	if (isFollow)
+	{
+		//_geo->getPosition();
+		_pFollowMan->setHomePosition(osg::Vec3(0, 0, 100000.0), osg::Vec3(), -osg::Z_AXIS);
+		_pFollowMan->setTrackNode(nodePlane);
+		_view->setCameraManipulator(_pFollowMan);
+		_view->getCamera()->setNearFarRatio(0.001);
+
+		_view->addEventHandler(new updateEventHandler(_geo, _vec3d));
+
+		//Viewpoint vp = _pEarthMan->getViewpoint();
+		//double dis = vp.getRange();
+		//double pitch = vp.getPitch();
+		//std::cout << "dis :" << dis << "pitch :" << pitch << std::endl;
+		////vp.setNode( _pat.get() );
+		////vp.setNode(_model);
+		//vp.range() = 25000.0;
+		//vp.pitch() = -45.0;
+		//_pEarthMan->setViewpoint(vp, 2.0);
+		////_pEarthMan->setViewpoint();
+		//_pEarthMan->setTetherNode(nodePlane);
+	} 
+	else
+	{
+		_view->setCameraManipulator(_pEarthMan);
+	}
+}
+
+void earthWidget::slot_addInterval()
+{
+	if (mInterval < 100)
+	{
+		mInterval += 10;
+	}
+}
+
+void earthWidget::slot_subInterval()
+{
+	if (mInterval > 0)
+	{
+		mInterval -= 10;
+	}
+}
+
+void earthWidget::test()
+{
+	
+}
+
+void earthWidget::slot_test()
+{
+	osg::Vec3f vec3f = _geo->getBound().center();
+	//std::cout << "Vec3d x:" << vec3f.x() << ", y:" << vec3f.y() << ", z:" << vec3f.z() << endl;
+
+	if (_vec3d->x() >= 117.5)
+	{
+		return;
+	}
+	_vec3d->x() += 0.001428;
+	_vec3d->y() += 0.00085166;
+
+	//std::cout << "Vec3d x:" << _vec3d->x() << ", y:" << _vec3d->y() << ", z:" << _vec3d->z() << endl;
+}
+
+void earthWidget::slot_startPlay()
+{
+	if (timer->isActive())
+	{
+		timer->stop();
+	} 
+	else
+	{
+		timer->start(100);
+	}
+}
+
+void earthWidget::connectWidgets()
+{
+	timer = new QTimer;
+	connect(timer, SIGNAL(timeout()), this, SLOT(slot_test()));
+}
+
+
+
+void earthWidget::slot_currentMousePos(osg::Vec3d mousePos)
+{
+	QString str;
+	str = QString("%1 , + %2").arg(mousePos.x()).arg(mousePos.y());
+	s_posLabel->setText(str.toStdString());
+}
+
+
+
+

@@ -1,0 +1,76 @@
+<!--
+osgEarth Sample
+This shows how to label point features with an attribute.
+-->
+
+<map name="Feature Geometry Demo" type="geocentric" version="2">
+        
+    <image name="world" driver="gdal">
+        <url>./moudles/world1.tif</url>
+    </image>
+	
+	<model name="world_boundaries" driver="feature_geom">
+            
+        <features name="world" driver="ogr">
+            <url>./map/shp/world.shp</url>
+            <build_spatial_index>true</build_spatial_index>
+            <convert type="line"/>
+        </features>
+        
+        <layout tile_size="500000" crop_features="true">
+            <level max_range="1e10"/>
+        </layout>
+                
+        <styles>
+            <style type="text/css">
+                world {
+                   stroke:                       #ffff00;
+                   stroke-width:                 1px;
+                   stroke-tessellation-size:     100km;
+                   render-depth-offset-min-bias: 1000;
+                }            
+            </style>
+        </styles>
+        
+    </model>
+	<!--<model name="usa" driver="feature_geom" max_range="10e7" min_range="5e4">
+		<features name="world" driver="ogr">
+			<url>.\map\shp\usa\ne_110m_admin_1_states_provinces_shp.shp</url>
+				<format>esri</format>
+				<build_spatial_index>true</build_spatial_index>
+				<convert type="polygon"/>		
+		</features>	
+		
+		<layout tile_size="500000" crop_features="true">
+            <level max_range="2e10"/>
+        </layout>
+                
+        <styles>
+            <style type="text/css">
+                world {
+                  stroke:                       #ffff00;
+                   stroke-width:                 2px;
+                   stroke-tessellation-size:     100000km;
+                   render-depth-offset-min-bias: 0.00001;
+				   fill: #00FF00;
+				   fill-opacity: 0.5;
+                }            
+            </style>
+		
+        </styles>
+	</model>-->
+
+        
+   
+
+	<!--options>
+		<cache type = "filesystem" cache_only = "false">
+			<path>./map/cache</path>
+			<format>jps</format>	
+		</cache>
+		<lighting>true</lighting>
+		<overlay_blending>false</overlay_blending>
+		<terrain min_lod="8"/>
+	</options-->
+  
+</map>
